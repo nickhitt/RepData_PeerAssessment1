@@ -1,0 +1,143 @@
+---
+title: "RepData_PeerAssignment1"
+author: "Nick Hitt"
+date: "11/14/2020"
+output: html_document
+keep_md: true
+---
+
+
+## Loading and preprocessing the data
+```{r dataprocessing, include=FALSE}
+fileName <- "Activity.zip"
+dir <- "activity"
+
+library(lubridate)
+library(dplyr)
+```
+```{r dataprocessing2, include=TRUE}
+if(!file.exists(dir)){
+  unzip("Activity.zip", files = NULL, exdir=".")
+}
+
+activity <- read.csv("activity.csv") 
+
+```
+
+We need to remove the zeros from steps because the zeros bias the median calculation
+```{r dataprocessing3, include=TRUE}
+steps_zer_removed <- activity[which(activity$steps != 0),] # removing zeros from steps because the zeros bias the median calculation
+
+```
+## What is mean total number of steps taken per day?
+
+First we need to calculate the average, sum and median steps and plot a histogram
+```{r meansteps, include=TRUE}
+
+daily_avg_steps <- aggregate(steps ~ date, activity, mean, na.rm = TRUE) 
+
+med_steps <- aggregate(as.numeric(steps) ~ date, steps_zer_removed, median, na.rm = TRUE) 
+
+sum_steps <- aggregate(steps ~ date, activity, sum, na.rm = TRUE) 
+
+hist(sum_steps[,2], main = "Histogram of Daily Sum of Steps",
+     xlab = "Sum of Steps", ylab = "Daily Frequency", xaxt = "n")
+axis(side=1, at=(seq(0,25000,5000)), labels=seq(0,25000,5000))
+
+sum_steps
+```
+
+
+## What is the average daily activity pattern?
+Here we need to find the average amount of steps per time interval of the day
+```{r avgactpattern, include=TRUE}
+
+int_avg_steps <- aggregate(steps ~ interval, activity, mean, na.rm = TRUE)
+```
+Then we need to find what time of the day has the highest steps
+```{r avgactpattern2, include=TRUE}
+
+max_steps <- max(int_avg_steps[,2]) 
+int_max_steps <- int_avg_steps[which(int_avg_steps[,2] == max_steps),1] 
+```
+Then plot the data
+```{r avgactpattern3, include=TRUE}
+
+library(ggplot2)
+g <- ggplot(int_avg_steps,aes(interval,steps))
+
+p<- g + geom_point() +geom_line() + ggtitle(expression("Total Steps by Interval")) +
+  ylab(expression("Total Steps")) +
+  xlab("Interval")
+
+print(p)
+```
+
+## Imputing missing values
+Now we need to 'fix' the data by replacing the missing values with data.
+We will do this by running a for loop that checks if each data point is missing or not.
+If it is missing then we will replace it with the average steps in that interval
+```{r fixmiss, include=TRUE}
+
+activity_na <- is.na(activity$steps) 
+total_na <- sum(activity_na) 
+
+
+fillNA <- numeric() 
+for (i in 1:nrow(activity)) { 
+  obs <- activity[i, ] 
+  if (is.na(obs$steps)) { 
+    steps <- subset(int_avg_steps, interval == obs$interval)$steps 
+  } else { 
+    steps <- obs$steps
+  }
+  fillNA <- c(fillNA, steps) 
+}
+```
+Now we should check and see how that effected the data. We will do that
+by making a histogram of thew daily sum of steps
+```{r fixmiss2, include=TRUE}
+new_activity <- activity 
+new_activity$steps <- fillNA 
+
+new_steps_zer_removed <- new_activity[which(new_activity$steps != 0),] 
+
+new_daily_avg_steps <- aggregate(steps ~ date, new_activity, mean, na.rm = TRUE) 
+new_sum_steps <- aggregate(steps ~ date, new_activity, sum, na.rm = TRUE) 
+new_med_steps <- aggregate(steps ~ date, new_activity, median, na.rm = TRUE) 
+
+
+hist(new_sum_steps[,2], main = "Histogram of Daily Sum of Steps",
+     xlab = "Sum of Steps", ylab = "Daily Frequency", xaxt = "n")
+axis(side=1, at=(seq(0,25000,5000)), labels=seq(0,25000,5000))
+```
+
+## Are there differences in activity patterns between weekdays and weekends?
+Now we should check and see if there are differences between activity patterns
+between the weekend and week days. We will change the dates to weekdays/weekends
+and then use those to plot a panel plot of the data to compare
+```{r weekvsweekend, include=TRUE}
+
+new_activity$date <- as.Date(new_activity$date) 
+days <- c(1:nrow(new_activity)) 
+
+factor_days <- c(1:nrow(new_activity)) 
+days <- weekdays(new_activity$date)
+
+days <- factor(days, levels = c("Monday", "Tuesday" , "Wednesday", "Thursday", "Friday","Saturday", "Sunday"),
+             labels = c("Weekday","Weekday","Weekday","Weekday","Weekday","Weekend","Weekend"))
+
+days <- data.frame("days" = days) 
+
+new_activity <- cbind(new_activity, days) 
+
+day_steps <- aggregate(steps ~ interval + days, new_activity, mean, na.rm = TRUE) 
+
+g1 <- ggplot(data = new_activity, aes(steps, interval)) +
+  geom_line(color = "steelblue", size = 1) +
+  labs(y = "Number of Steps", x = "Interval") + 
+  facet_grid(days ~.)
+
+print(g1)
+```
+
